@@ -6,7 +6,7 @@
 
 **Capybara Meow: Học Toán Vui Nhộn** là một tựa game endless-runner giáo dục mã nguồn mở chạy trực tiếp trên trình duyệt. Trò chơi kết hợp sự dễ thương của nhân vật Capybara và chú Mèo cam (Meow) với các thử thách toán học, giúp trẻ em từ 6-12 tuổi rèn luyện kỹ năng tính toán một cách đầy hứng thú.
 
-🎮 **[PLAY THE GAME LIVE HERE] (Thêm link GitHub Pages của bạn vào đây, ví dụ: https://your-username.github.io/capybara-meow)**
+🎮 **[PLAY THE GAME LIVE HERE] (https://chinhnt2k3.github.io/capybara-meow-game/)**
 
 ---
 
