@@ -7,7 +7,7 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #2c3e50; font-family: 'Comic Sans MS', 'Fredoka One', cursive, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; touch-action: none;}
         #game-container { position: relative; width: 100%; max-width: 800px; height: 100vw; max-height: 400px; border: 6px solid #4CAF50; border-radius: 15px; background-color: #87CEEB; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+        canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: pointer; }
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
         .hud { position: absolute; padding: 10px 15px; font-size: 20px; font-weight: bold; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); background: rgba(0,0,0,0.2); border-radius: 10px; margin: 10px;}
         #score-display { top: 0; left: 0; border-left: 5px solid #FFC107;}
@@ -49,7 +49,9 @@
     const ctx = canvas.getContext("2d");
 
     // --- AUDIO SYSTEM ---
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+
     function playTone(frequency, type, duration, vol=0.1) {
         if (audioCtx.state === 'suspended') audioCtx.resume();
         const oscillator = audioCtx.createOscillator();
@@ -63,11 +65,39 @@
         gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
         oscillator.stop(audioCtx.currentTime + duration);
     }
+
     const sfx = {
         correct: () => { playTone(600, 'sine', 0.1); setTimeout(()=>playTone(800, 'sine', 0.2), 100); },
         wrong: () => { playTone(150, 'sawtooth', 0.3, 0.2); setTimeout(()=>playTone(100, 'sawtooth', 0.4, 0.2), 150); },
         move: () => { playTone(300, 'triangle', 0.1, 0.05); setTimeout(()=>playTone(400, 'triangle', 0.1, 0.05), 50); }
     };
+
+    // --- AUDIO UNLOCKER CHO MOBILE ---
+    let audioUnlocked = false;
+    function unlockAudio() {
+        if (!audioUnlocked) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            // Phát một âm thanh trống để lừa trình duyệt iOS/Android mở khóa toàn bộ
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0; // Âm lượng = 0
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start(0);
+            oscillator.stop(audioCtx.currentTime + 0.001);
+
+            audioUnlocked = true;
+            
+            // Dọn dẹp sự kiện sau khi đã mở khóa xong
+            document.removeEventListener('touchstart', unlockAudio);
+            document.removeEventListener('mousedown', unlockAudio);
+        }
+    }
+    // Lắng nghe cú chạm ĐẦU TIÊN trên toàn bộ màn hình
+    document.addEventListener('touchstart', unlockAudio, { once: true });
+    document.addEventListener('mousedown', unlockAudio, { once: true });
 
     // --- PARTICLE SYSTEM ---
     let particles = [];
@@ -146,40 +176,33 @@
         currentGate = { x: canvas.width + 50, equation: `${num1} ${operatorStr} ${num2} = ?`, topAnswer: isTopCorrect ? answer : fakeAnswer, bottomAnswer: isTopCorrect ? fakeAnswer : answer, correctLane: isTopCorrect ? -1 : 1, passed: false };
     }
 
-    // --- CẬP NHẬT ĐIỀU KHIỂN (KEYBOARD & TOUCH) ---
+    // --- ĐIỀU KHIỂN ---
     function movePlayer(direction) {
         if (isGameOver) return;
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        // Đảm bảo âm thanh mở khóa nếu hàm unlockAudio chưa kịp bắt
+        if (audioCtx.state === 'suspended') audioCtx.resume(); 
+        
         if (direction === 'up') { player.lane = -1; player.targetY = 120; sfx.move(); } 
         else if (direction === 'down') { player.lane = 1; player.targetY = 280; sfx.move(); }
     }
 
-    // Keyboard (PC)
     window.addEventListener("keydown", (e) => {
         if (e.key === "ArrowUp") movePlayer('up');
         else if (e.key === "ArrowDown") movePlayer('down');
     });
 
-    // Màn hình cảm ứng (Mobile) & Click chuột (PC)
     function handleTouch(e) {
         if (isGameOver) return;
-        e.preventDefault(); // Ngăn cuộn trang trên mobile
+        e.preventDefault(); 
 
-        // Lấy tọa độ Y (hỗ trợ cả Touch và Mouse)
         let clientY = e.touches ? e.touches[0].clientY : e.clientY;
         let rect = canvas.getBoundingClientRect();
         let y = clientY - rect.top;
-
-        // Tính tỷ lệ theo chiều cao thực tế của canvas trên màn hình
         let scaleY = canvas.height / rect.height; 
         let canvasY = y * scaleY;
 
-        // Nửa trên -> nhảy lên, Nửa dưới -> nhảy xuống
-        if (canvasY < canvas.height / 2) {
-            movePlayer('up');
-        } else {
-            movePlayer('down');
-        }
+        if (canvasY < canvas.height / 2) movePlayer('up');
+        else movePlayer('down');
     }
 
     canvas.addEventListener("touchstart", handleTouch, {passive: false});
@@ -225,13 +248,12 @@
 
     function loop() { update(); draw(); if (!isGameOver) animationId = requestAnimationFrame(loop); }
 
-    // --- UI LOGIC ---
     function updateUI() {
         const text = dict[currentLang];
         document.getElementById("score-display").innerText = text.score + score; document.getElementById("level-display").innerText = text.level + level; document.getElementById("hearts-display").innerText = "❤️".repeat(Math.max(0, hearts)); document.getElementById("instructions").innerText = text.instructions; document.getElementById("lang-btn").innerText = text.langBtn; document.getElementById("go-title").innerText = text.gameOver; document.getElementById("go-score").innerText = text.yourScore + score; document.getElementById("restart-btn").innerText = text.restart;
     }
 
-    function toggleLanguage() { currentLang = currentLang === 'vi' ? 'en' : 'vi'; updateUI(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
+    function toggleLanguage() { currentLang = currentLang === 'vi' ? 'en' : 'vi'; updateUI(); }
 
     function endGame() { isGameOver = true; document.getElementById("game-over").style.display = "flex"; cancelAnimationFrame(animationId); }
 
@@ -239,7 +261,7 @@
         score = 0; level = 1; hearts = 3; gameSpeed = 3.5; isGameOver = false; frameCount = 0; particles = [];
         player.targetY = 220; player.lane = 0; player.y = 220;
         document.getElementById("game-over").style.display = "none";
-        updateUI(); generateMathGate(); loop(); if (audioCtx.state === 'suspended') audioCtx.resume();
+        updateUI(); generateMathGate(); loop(); 
     }
 
     // Init
